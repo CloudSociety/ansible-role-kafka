@@ -1,0 +1,4 @@
+# Python requirements for development
+-c requirements.txt
+pip-tools~=7.4.0
+ansible-lint~=24.10.0
