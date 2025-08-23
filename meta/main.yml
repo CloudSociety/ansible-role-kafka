@@ -1,0 +1,38 @@
+galaxy_info:
+  author: "Cloud Society contributors"
+  description: "Cloud society Ansible role for installing and configuring Kafka"
+  galaxy_tags:
+    - "kafka"
+    - "broker"
+    - "conrtoller"
+    - "kraft"
+    - "apache"
+    - "confluent"
+    - "log4j"
+    - "distributed"
+    - "producer"
+    - "consumer"
+    - "clustering"
+    - "messaging"
+    - "streaming"
+    - "streamprocessing"
+    - "eventsourcing"
+    - "pubsub"
+    - "events"
+    - "queue"
+
+  github_branch: "master"
+  issue_tracker_url: "https://github.com/CloudSociety/ansible-role-kafka/issues"
+  license: "GPL-3.0-only"
+  min_ansible_version: "2.17"
+  platforms:
+    - name: "Rocky"
+    - versions:
+        - "9.0"
+        - "9.1"
+        - "9.2"
+  role_name: "ansible_role_kafka"
+  standalone: true
+
+dependencies: []
+
