@@ -1,4 +1,5 @@
 # Python requirements for development
 -c requirements.txt
-pip-tools~=7.4.0
 ansible-lint~=24.10.0
+molecule~=24.12
+pip-tools~=7.4.0

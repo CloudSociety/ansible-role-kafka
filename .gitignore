@@ -108,3 +108,4 @@ roles/cbs-panel/files/charging-panel/node_modules
 roles/cbs-panel/files/charging-panel/build
 roles/cbs-panel/files/charging-panel/build.zip
 roles/cbs-panel/files/charging-panel/build*
+.lock

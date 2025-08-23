@@ -8,11 +8,13 @@ ansible-compat==25.8.1
     # via
     #   -c requirements.txt
     #   ansible-lint
+    #   molecule
 ansible-core==2.17.13
     # via
     #   -c requirements.txt
     #   ansible-compat
     #   ansible-lint
+    #   molecule
 ansible-lint==24.10.0
     # via -r dev-requirements.in
 attrs==25.3.0
@@ -38,11 +40,21 @@ click==8.2.1
     # via
     #   -c requirements.txt
     #   black
+    #   click-help-colors
+    #   molecule
     #   pip-tools
+click-help-colors==0.9.4
+    # via
+    #   -c requirements.txt
+    #   molecule
 cryptography==45.0.6
     # via
     #   -c requirements.txt
     #   ansible-core
+enrich==1.2.7
+    # via
+    #   -c requirements.txt
+    #   molecule
 filelock==3.19.1
     # via ansible-lint
 importlib-metadata==8.7.0
@@ -51,11 +63,13 @@ jinja2==3.1.6
     # via
     #   -c requirements.txt
     #   ansible-core
+    #   molecule
 jsonschema==4.25.1
     # via
     #   -c requirements.txt
     #   ansible-compat
     #   ansible-lint
+    #   molecule
 jsonschema-specifications==2025.4.1
     # via
     #   -c requirements.txt
@@ -72,6 +86,10 @@ mdurl==0.1.2
     # via
     #   -c requirements.txt
     #   markdown-it-py
+molecule==24.12.0
+    # via
+    #   -c requirements.txt
+    #   -r dev-requirements.in
 mypy-extensions==1.1.0
     # via black
 packaging==25.0
@@ -82,6 +100,7 @@ packaging==25.0
     #   ansible-lint
     #   black
     #   build
+    #   molecule
 pathspec==0.12.1
     # via
     #   ansible-lint
@@ -93,6 +112,10 @@ pip-tools==7.4.1
     #   -r dev-requirements.in
 platformdirs==4.3.8
     # via black
+pluggy==1.6.0
+    # via
+    #   -c requirements.txt
+    #   molecule
 pycparser==2.22
     # via
     #   -c requirements.txt
@@ -112,6 +135,7 @@ pyyaml==6.0.2
     #   ansible-compat
     #   ansible-core
     #   ansible-lint
+    #   molecule
     #   yamllint
 referencing==0.36.2
     # via
@@ -126,6 +150,8 @@ rich==14.1.0
     # via
     #   -c requirements.txt
     #   ansible-lint
+    #   enrich
+    #   molecule
 rpds-py==0.27.0
     # via
     #   -c requirements.txt
@@ -144,6 +170,7 @@ wcmatch==10.1
     # via
     #   -c requirements.txt
     #   ansible-lint
+    #   molecule
 wheel==0.45.1
     # via
     #   -c requirements.txt
