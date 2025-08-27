@@ -86,12 +86,19 @@ def subnet_in_use?(network_ips)
   network_ips.any? { |net, test_ip| net.include?(test_ip) }
 end
 
-network_ips = collect_networks($subnet)
+def should_check_subnet?
+  cmd = (ARGV[0] || "").to_s
+  return false if ENV["VAGRANT_NO_SUBNET_CHECK"] == "1"
+  %w[up reload resume].include?(cmd)
+end
 
-if subnet_in_use?(network_ips)
-  puts "Invalid subnet provided, subnet is already in use: #{$subnet}.0"
-  puts "Subnets in use: #{network_ips.inspect}"
-  exit 1
+if should_check_subnet?
+  network_ips = collect_networks($subnet)
+  if subnet_in_use?(network_ips)
+    warn "Invalid subnet provided, subnet is already in use: #{$subnet}.0"
+    warn "Subnets in use: #{network_ips.inspect}"
+    exit 1
+  end
 end
 
 # throw error if os is not supported
@@ -111,7 +118,7 @@ if Vagrant.has_plugin?("vagrant-proxyconf")
 end
 
 Vagrant.configure("2") do |config|
-
+  
   config.vm.box = $box
   if SUPPORTED_OS[$os].has_key? :box_url
     config.vm.box_url = SUPPORTED_OS[$os][:box_url]
@@ -151,7 +158,6 @@ Vagrant.configure("2") do |config|
         vb.linked_clone = true
         vb.customize ["modifyvm", :id, "--vram", "8"]
         vb.customize ["modifyvm", :id, "--audio", "none"]
-        vb.customize ['storagectl', :id, '--name', 'SATA Controller', '--add', 'sata', '--controller', 'IntelAhci', '--portcount', '8']
       end
 
       if $expose_docker_tcp
