@@ -1,0 +1,56 @@
+- name: Find root project directory and generate vagrant ssh config file
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Gather only environment facts
+      ansible.builtin.setup:
+        filter: ansible_env
+
+    - name: "command pwd with chdir='{{ ansible_env.PWD | dirname | dirname }}'"
+      ansible.builtin.command: pwd
+      args:
+        chdir: "{{ ansible_env.PWD | dirname | dirname }}"
+      register: project_root_directory
+      changed_when: false
+
+    - name: Set fact project_root_dir
+      ansible.builtin.set_fact:
+        project_root_dir: "{{ project_root_directory.stdout | trim }}"
+
+    - name: Ensure this looks like a Vagrant project
+      ansible.builtin.stat:
+        path: "{{ project_root_dir }}/Vagrantfile"
+      register: vagrantfile_stat
+
+    - name: Fail if Vagrantfile is missing
+      ansible.builtin.fail:
+        msg: "No Vagrantfile at {{ project_root_dir }}; cannot run 'vagrant ssh-config'."
+      when: not vagrantfile_stat.stat.exists
+
+    - name: Ensure .vagrant directory exists
+      ansible.builtin.file:
+        path: "{{ project_root_dir }}/.vagrant"
+        state: directory
+        mode: '0700'
+
+    - name: Generate vagrant ssh-config (all machines)
+      ansible.builtin.command: vagrant ssh-config
+      args:
+        chdir: "{{ project_root_dir }}"
+      register: vagrant_ssh_config
+      changed_when: false
+      failed_when: vagrant_ssh_config.rc != 0
+
+    - name: Write ssh-config to .vagrant/ssh-config
+      ansible.builtin.copy:
+        dest: "{{ project_root_dir }}/.vagrant/ssh-config"
+        content: "{{ vagrant_ssh_config.stdout }}"
+        mode: '0644'
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "project root directory -> {{ project_root_dir }}"
+          - "ssh-config written     -> {{ project_root_dir }}/.vagrant/ssh-config"

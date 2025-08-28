@@ -1,0 +1,7 @@
+---
+- name: Install and Configure kafka cluster
+  hosts: all
+  become: true
+  become_method: ansible.builtin.sudo
+  roles:
+    - ansible-role-kafka
