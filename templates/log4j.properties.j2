@@ -1,0 +1,26 @@
+# Maintained by Ansible
+{% macro flatten_dict(d, prefix="") %}
+{%- for key, value in d.items() -%}
+{%- set full_key = (prefix ~ '.' if prefix else '') ~ key -%}
+{%- if key == '__this' -%}
+{%- if value is defined and value != "" and value is not none -%}
+{%- if ('log4j.' ~ prefix) in __kafka_inner_classes %}
+{{ 'log4j.' ~ prefix }}$={{ value }}{{ '\n' }}
+{%- else %}
+{{ 'log4j.' ~ prefix }}={{ value }}{{ '\n' }}
+{%- endif %}
+{%- endif -%}
+{%- elif value is mapping -%}
+{{ flatten_dict(value, full_key) }}
+{%- else -%}
+{%- if value is defined and value != "" and value is not none -%}
+{%- if ('log4j.' ~ full_key) in __kafka_inner_classes %}
+{{ 'log4j.' ~ full_key }}$={{ value }}{{ '\n' }}
+{%- else %}
+{{ 'log4j.' ~ full_key }}={{ value }}{{ '\n' }}
+{%- endif %}
+{%- endif -%}
+{%- endif -%}
+{%- endfor -%}
+{% endmacro %}
+{{ flatten_dict(kafka_logging.custom_log4j.properties) }}

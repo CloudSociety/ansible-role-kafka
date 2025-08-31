@@ -110,3 +110,14 @@
     owner: "{{ kafka_install.user }}"
     group: "{{ kafka_install.group }}"
   notify: Restart_kafka
+
+- name: Render out kafka log4j custom properties
+  ansible.builtin.template:
+    src: log4j.properties.j2
+    dest: "{{ kafka_files.log4j_conf }}"
+    owner: "{{ kafka_install.user }}"
+    group: "{{ kafka_install.group }}"
+    mode: '0644'
+  when:
+    - kafka_logging.custom_log4j.enabled | default(false) | bool
+  notify: Restart_kafka

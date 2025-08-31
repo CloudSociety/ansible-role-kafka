@@ -19,3 +19,82 @@ kafka_files:
   log4j_conf: "/etc/kafka/log4j.properties"
   server_start: "/bin/kafka-server-start"
   systemd_service: "/lib/systemd/system/confluent-kafka.service"
+
+# `__this` is used for the value of item itself (not its children)
+kafka_logging:
+  dir: "/var/log/confluent"
+  custom_log4j:
+    enabled: true
+    properties:
+      logger:
+        kafka:
+          __this: "INFO"
+          request:
+            logger: "WARN, requestAppender"
+          network:
+            RequestChannel: "WARN, requestAppender"
+          log:
+            LogCleaner: "INFO, cleanerAppender"
+          authorizer:
+            logger: "INFO, authorizerAppender"
+        org:
+          apache:
+            kafka:
+              controller: "INFO, controllerAppender"
+        state:
+          change:
+            logger: "INFO, stateChangeAppender"
+      additivity:
+        kafka:
+          request:
+            logger: false
+          log:
+            LogCleaner: false
+          network:
+            RequestChannel: false
+          authorizer:
+            logger: false
+        org:
+          apache:
+            kafka:
+              __this: "INFO"
+              controller: false
+        state:
+          change:
+            logger: false
+      appender:
+        stdout:
+          __this: "org.apache.log4j.ConsoleAppender"
+          layout:
+            __this: "org.apache.log4j.PatternLayout"
+            ConversionPattern: "[%d] %p %m (%c)%n"
+        stateChangeAppender:
+          __this: "org.apache.log4j.RollingFileAppender"
+          File: "${kafka.logs.dir}/state-change.log"
+          layout:
+            __this: "org.apache.log4j.PatternLayout"
+            ConversionPattern: "[%d] %p %m (%c)%n"
+        requestAppender:
+          __this: "org.apache.log4j.RollingFileAppender"
+          File: "${kafka.logs.dir}/kafka-request.log"
+          layout:
+            __this: "layout=org.apache.log4j.PatternLayout"
+            ConversionPattern: "[%d] %p %m (%c)%n"
+        cleanerAppender:
+          __this: "org.apache.log4j.RollingFileAppender"
+          File: "${kafka.logs.dir}/log-cleaner.log"
+          layout:
+            __this: "org.apache.log4j.PatternLayout"
+            ConversionPattern: "[%d] %p %m (%c)%n"
+        controllerAppender:
+          __this: "org.apache.log4j.RollingFileAppender"
+          File: "${kafka.logs.dir}/controller.log"
+          layout:
+            __this: "org.apache.log4j.PatternLayout"
+            ConversionPattern: "[%d] %p %m (%c)%n"
+        authorizerAppender:
+          __this: "org.apache.log4j.RollingFileAppender"
+          File: "${kafka.logs.dir}/kafka-authorizer.log"
+          layout:
+            __this: "org.apache.log4j.PatternLayout"
+            ConversionPattern: "[%d] %p %m (%c)%n"
