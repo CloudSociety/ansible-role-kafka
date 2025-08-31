@@ -18,3 +18,14 @@
     system: true
     shell: "{{ kafka_install.user_login_shell }}"
     group: "{{ kafka_install.group }}"
+
+- name: Install Java on Rhel
+  ansible.builtin.dnf:
+    name: "{{ kafka_install.rhl_java_package_name }}"
+    state: present
+  register: java_install_result
+  until: java_install_result is success
+  retries: 10
+  delay: 5
+  when:
+    - ansible_os_family == "RedHat"
