@@ -1,2 +1,6 @@
 ---
-# handlers file for ansible-role-kafka
+- name: Restart_kafka
+  ansible.builtin.systemd_service:
+    name: "{{ kafka_files.systemd_service | basename }}"
+    state: restarted
+    daemon_reload: true

@@ -1,0 +1,19 @@
+# Maintained by Ansible
+{% macro flatten_dict(d, prefix="") %}
+{%- for key, value in d.items() -%}
+{%- set full_key = (prefix ~ '.' if prefix else '') ~ key -%}
+{%- if value is mapping -%}
+{{ flatten_dict(value, full_key) }}
+{%- else -%}
+{%- if value is defined and value != "" and value is not none -%}
+{{ full_key }}:{{ value }}
+{% endif -%}
+{%- endif -%}
+{%- endfor -%}
+{% endmacro %}
+
+{% if kafka_is_broker | default(false) | bool %}
+{{ flatten_dict(kafka_broker_properties) }}
+{% elif kafka_is_controller | default(false) | bool %}
+{{ flatten_dict(kafka_controller_properties) }}
+{% endif %}

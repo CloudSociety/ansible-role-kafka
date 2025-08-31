@@ -101,3 +101,12 @@
     group: "{{ kafka_install.group }}"
     state: directory
     mode: '750'
+
+- name: Render out kafka server properties
+  ansible.builtin.template:
+    src: server.properties.j2
+    dest: "{{ kafka_files.server_conf }}"
+    mode: '640'
+    owner: "{{ kafka_install.user }}"
+    group: "{{ kafka_install.group }}"
+  notify: Restart_kafka

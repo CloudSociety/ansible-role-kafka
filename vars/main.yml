@@ -1,2 +1,4 @@
 ---
-# vars file for ansible-role-kafka
+__kafka_inner_classes:
+  - "log4j.logger.kafka.network.RequestChannel"
+  - "log4j.additivity.kafka.network.RequestChannel"

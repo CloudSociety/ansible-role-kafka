@@ -1,0 +1,853 @@
+---
+kafka_broker:
+  listeners:
+    internal:
+      name: "INTERNAL"
+      ip: "{{ ansible_host }}"
+      port: 9092
+      sasl_protocol: "PLAINTEXT" # GSSAPI or SCRAM-SHA-512 or SCRAM-SHA-256 or OAUTHBEARER or SASL_SSL or SASL_PLAINTEXT or SSL or PLAINTEXT
+    broker:
+      name: "BROKER"
+      ip: "{{ ansible_host }}"
+      port: 9091
+      sasl_protocol: "PLAINTEXT" # GSSAPI or SCRAM-SHA-512 or SCRAM-SHA-256 or OAUTHBEARER or SASL_SSL or SASL_PLAINTEXT or SSL or PLAINTEXT
+  systemd_service:
+    Unit:
+      Description: "Apache Kafka - Broker"
+      Documentation: "https://kafka.apache.org/20/documentation.html"
+      After: "network.target"
+    Service:
+      Type: "simple"
+      User: "{{ kafka_install.user }}"
+      Group: "{{ kafka_install.group }}"
+      ExecStart: "{{ kafka_files.server_start }} {{ kafka_files.server_conf }}"
+      LimitNOFILE: 1000000
+      TimeoutStopSec: 180
+      Restart: "on-failer"
+      Environment:
+        KAFKA_HEAP_OPTS: "-Xms1g -Xmx6g -XX:MetaspaceSize=96m -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35 -XX:G1HeapRegionSize=16M -XX:MinMetaspaceFreeRatio=50 -XX:MaxMetaspaceFreeRatio=80"
+        KAFKA_LOG4J_OPTS: "{% if kafka_logging.custom_log4j.enabled | default(false) | bool %}-Dlog4j.configuration=file:{{ kafka_files.log4j_conf }}{% endif %}"
+        LOG_DIR: "{{ kafka_logging.dir | regex_replace('\\/$', '') }}"
+        KAFKA_OPTS: "-Djava.net.preferIPv4Stack=true"
+    Install:
+      WantedBy: "multi-user.target"
+
+kafka_broker_properties:
+  advertised:
+    listeners: "{% for key, listener in kafka_broker.listeners.items() %}{{ listener.name }}://{{ listener.ip }}:{{ listener.port }}{% if not loop.last %},{% endif %}{% endfor %}"
+  alter:
+    log:
+      dirs:
+        replication:
+          quota:
+            window:
+              num: 11
+              size:
+                seconds: 1
+  authorizer:
+    class:
+      name: ""
+  auto:
+    create:
+      topics:
+        enable: true
+    include:
+      jmx:
+        reporter: true
+    leader:
+      rebalance:
+        enable: true
+  background:
+    threads: 10
+  broker:
+    heartbeat:
+      interval:
+        ms: 2000
+    id:
+      generation:
+        enable: true
+    rack: ""
+    session:
+      timeout:
+        ms: 9000
+  compression:
+    gzip:
+      level: -1
+    lz4:
+      level: 9
+    type: "producer"
+    zstd:
+      level: 3
+  connection:
+    failed:
+      authentication:
+        delay:
+          ms: 100
+  connections:
+    max:
+      idle:
+        ms: 600000
+      reauth:
+        ms: 3600000
+  control:
+    plane:
+      listener:
+        name: ""
+  controlled:
+    shutdown:
+      enable: ""
+      max:
+        retries: ""
+      retry:
+        backoff:
+          ms: ""
+  controller:
+    listener:
+      names: "{% for controller_hostname in (kafka_group_hosts | select('contains','controller') | list) %}{{ hostvars[controller_hostname]['kafka_controller']['listeners']['controller']['name'] }}{% if not loop.last %},{% endif %}{% endfor %}"
+    quorum:
+      append:
+        linger:
+          ms: ""
+      bootstrap:
+        servers: "{% for controller_hostname in (kafka_group_hosts | select('contains', 'controller') | list) %}{{ hostvars[controller_hostname]['kafka_controller']['listeners']['controller']['ip'] }}:{{ hostvars[controller_hostname]['kafka_controller']['listeners']['controller']['port'] | default(9093, true) }}{% if not loop.last %},{% endif %}{% endfor %}"
+      election:
+        backoff:
+          max:
+            ms: 1000
+        timeout:
+          ms: 1000
+      fetch:
+        timeout:
+          ms: 2000
+      request:
+        timeout:
+          ms: ""
+      retry:
+        backoff:
+          ms: ""
+      voters: "{% for controller_hostname in kafka_group_hosts %}{% if 'controller' in controller_hostname %}{{ loop.index }}@{{ hostvars[controller_hostname]['kafka_controller']['listeners']['controller']['ip'] }}:{{ hostvars[controller_hostname]['kafka_controller']['listeners']['controller']['port'] | default(9093, true) }}{% if not loop.last %},{% endif %}{% endif %}{% endfor %}"
+    quota:
+      window:
+        num: ""
+        size:
+          seconds: ""
+    socket:
+      timeout:
+        ms: ""
+  create:
+    topic:
+      policy:
+        class:
+          name: ""
+  default:
+    replication:
+      factor: "{{ [kafka_group_hosts | select('contains', 'broker') | list | length, 3] | max | int }}"
+  delegation:
+    token:
+      expiry:
+        check:
+          interval:
+            ms: ""
+        time:
+          ms: ""
+      master:
+        key: ""
+      max:
+        lifetime:
+          ms: ""
+      secret:
+        key: ""
+  delete:
+    records:
+      purgatory:
+        purge:
+          interval:
+            requests: ""
+    topic:
+      enable: true
+  early:
+    start:
+      listeners: ""
+  eligible:
+    leader:
+      replicas:
+        enable: false
+  fetch:
+    max:
+      bytes: ""
+    purgatory:
+      purge:
+        interval:
+          requests: ""
+  group:
+    consumer:
+      assignors: ""
+      heartbeat:
+        interval:
+          ms: ""
+      max:
+        heartbeat:
+          interval:
+            ms: ""
+        session:
+          timeout:
+            ms: ""
+        size: ""
+      min:
+        heartbeat:
+          interval:
+            ms: ""
+        session:
+          timeout:
+            ms: ""
+      session:
+        timeout:
+          ms: ""
+    coordinator:
+      append:
+        linger:
+          ms: ""
+      rebalance:
+        protocols: ""
+      threads: ""
+    initial:
+      rebalance:
+        delay:
+          ms: 3000
+    max:
+      session:
+        timeout:
+          ms: ""
+      size: ""
+    min:
+      session:
+        timeout:
+          ms: ""
+    share:
+      delivery:
+        count:
+          limit: ""
+      heartbeat:
+        interval:
+          ms: ""
+      max:
+        groups: ""
+        heartbeat:
+          interval:
+            ms: ""
+        record:
+          lock:
+            duration:
+              ms: ""
+        session:
+          timeout:
+            ms: ""
+        size: ""
+      min:
+        heartbeat:
+          interval:
+            ms: ""
+        record:
+          lock:
+            duration:
+              ms: ""
+        session:
+          timeout:
+            ms: ""
+      partition:
+        max:
+          record:
+            locks: ""
+      record:
+        lock:
+          duration:
+            ms: ""
+      session:
+        timeout:
+          ms: ""
+  initial:
+    broker:
+      registration:
+        timeout:
+          ms: ""
+  inter:
+    broker:
+      listener:
+        name: "{{ kafka_broker.listeners.internal.name }}"
+      protocol:
+        version: ""
+  kafka:
+    metrics:
+      polling:
+        interval:
+          secs: ""
+      reporters: ""
+  leader:
+    imbalance:
+      check:
+        interval:
+          seconds: 300
+      per:
+        broker:
+          percentage: 10
+  listener:
+    security:
+      protocol:
+        map: "{% set all_listeners = [] %}{% for hostname in (kafka_group_hosts | list) %}{% set host_vars = hostvars[hostname] %}{% if 'kafka_broker' in host_vars %}{% for key, listener in host_vars['kafka_broker']['listeners'].items() %}{% set _ = all_listeners.append(listener.name + ':' + listener.sasl_protocol) %}{% endfor %}{% endif %}{% if 'kafka_controller' in host_vars %}{% for key, listener in host_vars['kafka_controller']['listeners'].items() %}{% set _ = all_listeners.append(listener.name + ':' + listener.sasl_protocol) %}{% endfor %}{% endif %}{% endfor %}{{ all_listeners | unique | join(',') }}"
+  listeners: "{% for key, listener in kafka_broker.listeners.items() %}{{ listener.name }}://{{ listener.ip }}:{{ listener.port }}{% if not loop.last %},{% endif %}{% endfor %}"
+  log:
+    cleaner:
+      backoff:
+        ms: ""
+      dedupe:
+        buffer:
+          size: ""
+      delete:
+        retention:
+          ms: ""
+      enable: ""
+      io:
+        buffer:
+          load:
+            factor: ""
+          size: ""
+        max:
+          bytes:
+            per:
+              second: ""
+      max:
+        compaction:
+          lag:
+            ms: ""
+      min:
+        cleanable:
+          ratio: ""
+        compaction:
+          lag:
+            ms: ""
+      threads: ""
+    cleanup:
+      policy: ""
+    dir:
+      failure:
+        timeout:
+          ms: ""
+    dirs: "/var/lib/kafka/data"
+    flush:
+      interval:
+        messages: 9223372036854775807
+        ms: ""
+      offset:
+        checkpoint:
+          interval:
+            ms: 60000
+      scheduler:
+        interval:
+          ms: 9223372036854775807
+      start:
+        offset:
+          checkpoint:
+            interval:
+              ms: 60000
+    index:
+      interval:
+        bytes: ""
+      size:
+        max:
+          bytes: ""
+    local:
+      retention:
+        bytes: ""
+        ms: ""
+    message:
+      downconversion:
+        enable: ""
+      format:
+        version: ""
+      timestamp:
+        after:
+          max:
+            ms: ""
+        before:
+          max:
+            ms: ""
+        difference:
+          max:
+            ms: ""
+        type: ""
+    preallocate: ""
+    retention:
+      bytes: -1
+      check:
+        interval:
+          ms: 300000
+      hours: 168
+      minutes: ""
+      ms: ""
+    roll:
+      hours: 168
+      jitter:
+        hours: 0
+        ms: ""
+      ms: ""
+    segment:
+      bytes: 1073741824
+      delete:
+        delay:
+          ms: 60000
+  max:
+    connection:
+      creation:
+        rate: ""
+    connections:
+      per:
+        ip:
+          overrides: ""
+    incremental:
+      fetch:
+        session:
+          cache:
+            slots: ""
+    request:
+      partition:
+        size:
+          limit: ""
+  message:
+    max:
+      bytes: 1048588
+  metadata:
+    log:
+      dir: ""
+      max:
+        record:
+          bytes:
+            between:
+              snapshots: 20971520
+        snapshot:
+          interval:
+            ms: 3600000
+      segment:
+        bytes: 1073741824
+        ms: 604800000
+    max:
+      idle:
+        interval:
+          ms: ""
+      retention:
+        bytes: 104857600
+        ms: 604800000
+  metric:
+    reporters: ""
+  metrics:
+    num:
+      samples: ""
+    recording:
+      level: ""
+    sample:
+      window:
+        ms: ""
+  min:
+    insync:
+      replicas: 1
+  node:
+    id: "{% for kafka_hostname in kafka_group_hosts %}{% if kafka_hostname == inventory_hostname %}{{ loop.index }}{% endif %}{% endfor %}"
+  num:
+    io:
+      threads: 16
+    network:
+      threads: 8
+    partitions: 1
+    recovery:
+      threads:
+        per:
+          data:
+            dir: 1
+    replica:
+      alter:
+        log:
+          dirs:
+            threads: ""
+      fetchers: 1
+  offset:
+    metadata:
+      max:
+        bytes: 4096
+  offsets:
+    commit:
+      required:
+        acks: ""
+      timeout:
+        ms: 5000
+    load:
+      buffer:
+        size: 5242880
+    retention:
+      check:
+        interval:
+          ms: 600000
+      minutes: 10080
+    topic:
+      compression:
+        codec: 0
+      num:
+        partitions: 50
+      replication:
+        factor: "{{ [kafka_group_hosts | select('contains', 'broker') | list | length, 3] | max | int }}"
+      segment:
+        bytes: 104857600
+  password:
+    encoder:
+      cipher:
+        algorithm: ""
+      iterations: ""
+      key:
+        length: ""
+      keyfactory:
+        algorithm: ""
+      old:
+        secret: ""
+      secret: ""
+  principal:
+    builder:
+      class: ""
+  process:
+    roles: "broker"
+  producer:
+    id:
+      expiration:
+        ms: ""
+    purgatory:
+      purge:
+        interval:
+          requests: ""
+  queued:
+    max:
+      request:
+        bytes: ""
+      requests: 500
+  quota:
+    window:
+      num: ""
+      size:
+        seconds: ""
+  remote:
+    fetch:
+      max:
+        wait:
+          ms: ""
+    log:
+      index:
+        file:
+          cache:
+            total:
+              size:
+                bytes: ""
+      manager:
+        copier:
+          thread:
+            pool:
+              size: ""
+        copy:
+          max:
+            bytes:
+              per:
+                second: ""
+          quota:
+            window:
+              num: ""
+              size:
+                seconds: ""
+        expiration:
+          thread:
+            pool:
+              size: ""
+        fetch:
+          max:
+            bytes:
+              per:
+                second: ""
+          quota:
+            window:
+              num: ""
+              size:
+                seconds: ""
+        task:
+          interval:
+            ms: ""
+        thread:
+          pool:
+            size: ""
+      metadata:
+        custom:
+          metadata:
+            max:
+              bytes: ""
+        manager:
+          class:
+            name: ""
+            path: ""
+          impl:
+            prefix: ""
+          listener:
+            name: ""
+      reader:
+        max:
+          pending:
+            tasks: ""
+        threads: ""
+      storage:
+        manager:
+          class:
+            name: ""
+            path: ""
+          impl:
+            prefix: ""
+        system:
+          enable: ""
+  replica:
+    fetch:
+      backoff:
+        ms: ""
+      max:
+        bytes: 1
+      min:
+        bytes: ""
+      response:
+        max:
+          bytes: ""
+      wait:
+        max:
+          ms: 500
+    high:
+      watermark:
+        checkpoint:
+          interval:
+            ms: 5000
+    lag:
+      time:
+        max:
+          ms: 30000
+    selector:
+      class: ""
+    socket:
+      receive:
+        buffer:
+          bytes: 65536
+      timeout:
+        ms: 30000
+  replication:
+    quota:
+      window:
+        num: ""
+        size:
+          seconds: ""
+  request:
+    timeout:
+      ms: 30000
+  reserved:
+    broker:
+      max:
+        id: ""
+  sasl:
+    client:
+      callback:
+        handler:
+          class: ""
+    enabled:
+      mechanisms: ""
+    jaas:
+      config: ""
+    kerberos:
+      kinit:
+        cmd: ""
+      min:
+        time:
+          before:
+            relogin: ""
+      principal:
+        to:
+          local:
+            rules: ""
+      service:
+        name: ""
+      ticket:
+        renew:
+          jitter: ""
+          window:
+            factor: ""
+    login:
+      callback:
+        handler:
+          class: ""
+      class: ""
+      connect:
+        timeout:
+          ms: ""
+      read:
+        timeout:
+          ms: ""
+      refresh:
+        buffer:
+          seconds: ""
+        min:
+          period:
+            seconds: ""
+        window:
+          factor: ""
+          jitter: ""
+      retry:
+        backoff:
+          max:
+            ms: ""
+          ms: ""
+    mechanism:
+      controller:
+        protocol: "PLAIN"
+      inter:
+        broker:
+          protocol: "PLAIN"
+    oauthbearer:
+      clock:
+        skew:
+          seconds: ""
+      expected:
+        audience: ""
+        issuer: ""
+      jwks:
+        endpoint:
+          refresh:
+            ms: ""
+          retry:
+            backoff:
+              max:
+                ms: ""
+              ms: ""
+          url: ""
+      scope:
+        claim:
+          name: ""
+      sub:
+        claim:
+          name: ""
+      token:
+        endpoint:
+          url: ""
+    server:
+      callback:
+        handler:
+          class: ""
+      max:
+        receive:
+          size: ""
+  security:
+    inter:
+      broker:
+        protocol: ""
+    providers: ""
+  socket:
+    connection:
+      setup:
+        timeout:
+          max:
+            ms: ""
+          ms: ""
+    listen:
+      backlog:
+        size: ""
+    receive:
+      buffer:
+        bytes: 102400
+    request:
+      max:
+        bytes: 104857600
+    send:
+      buffer:
+        bytes: 102400
+  ssl:
+    allow:
+      dn:
+        changes: ""
+      san:
+        changes: ""
+    cipher:
+      suites: ""
+    client:
+      auth: ""
+    enabled:
+      protocols: ""
+    endpoint:
+      identification:
+        algorithm: ""
+    engine:
+      factory:
+        class: ""
+    key:
+      password: ""
+    keymanager:
+      algorithm: ""
+    keystore:
+      certificate:
+        chain: ""
+      key: ""
+      location: ""
+      password: ""
+      type: ""
+    principal:
+      mapping:
+        rules: ""
+    protocol: ""
+    provider: ""
+    secure:
+      random:
+        implementation: ""
+    trustmanager:
+      algorithm: ""
+    truststore:
+      certificates: ""
+      location: ""
+      password: ""
+      type: ""
+  telemetry:
+    max:
+      bytes: ""
+  transaction:
+    abort:
+      timed:
+        out:
+          transaction:
+            cleanup:
+              interval:
+                ms: ""
+    max:
+      timeout:
+        ms: 900000
+    partition:
+      verification:
+        enable: ""
+    remove:
+      expired:
+        transaction:
+          cleanup:
+            interval:
+              ms: ""
+    state:
+      log:
+        load:
+          buffer:
+            size: 5242880
+        min:
+          isr: 2
+        num:
+          partitions: 50
+        replication:
+          factor: "{{ [kafka_group_hosts | select('contains', 'broker') | list | length, 3] | max | int }}"
+        segment:
+          bytes: 104857600
+  transactional:
+    id:
+      expiration:
+        ms: 604800000
+  unclean:
+    leader:
+      election:
+        enable: false
