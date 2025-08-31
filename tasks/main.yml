@@ -125,3 +125,43 @@
 - name: Include Kraft Cluster Data
   ansible.builtin.include_tasks:
     file: get_meta_properties.yml
+
+- name: Set Permissions on Kafka Broker Data Directories and Files
+  when: kafka_is_broker | default(false) | bool
+  block:
+    - name: Set Permissions on Data Dirs of broker node
+      ansible.builtin.file:
+        path: "{{ item }}"
+        owner: "{{ kafka_install.user }}"
+        group: "{{ kafka_install.group }}"
+        state: directory
+        mode: '750'
+      loop: "{{ kafka_broker_properties.log.dirs.split(',') }}"
+
+    - name: Set Permissions on Data Dir files of broker node
+      ansible.builtin.file:
+        path: "{{ item }}"
+        owner: "{{ kafka_install.user }}"
+        group: "{{ kafka_install.group }}"
+        recurse: true
+      loop: "{{ kafka_broker_properties.log.dirs.split(',') }}"
+
+- name: Set Permissions on Kafka Controller Data Directories and Files
+  when: kafka_is_controller | default(false) | bool
+  block:
+    - name: Set Permissions on Data Dirs of controller node
+      ansible.builtin.file:
+        path: "{{ item }}"
+        owner: "{{ kafka_install.user }}"
+        group: "{{ kafka_install.group }}"
+        state: directory
+        mode: '750'
+      loop: "{{ kafka_controller_properties.log.dirs.split(',') }}"
+
+    - name: Set Permissions on Data Dir files of controller node
+      ansible.builtin.file:
+        path: "{{ item }}"
+        owner: "{{ kafka_install.user }}"
+        group: "{{ kafka_install.group }}"
+        recurse: true
+      loop: "{{ kafka_controller_properties.log.dirs.split(',') }}"
