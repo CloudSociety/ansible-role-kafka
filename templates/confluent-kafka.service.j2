@@ -1,0 +1,61 @@
+# Maintained by Ansible
+[Unit]
+{% if kafka_is_controller | default(false) | bool %}
+{% for key, value in kafka_controller.systemd_service.Unit.items() %}
+{% if value and value != '' %}
+{{ key }}={{ value }}
+{% endif %}
+{% endfor %}
+{% elif kafka_is_broker | default(false) | bool %}
+{% for key, value in kafka_broker.systemd_service.Unit.items() %}
+{% if value and value != '' %}
+{{ key }}={{ value }}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+[Service]
+{% if kafka_is_controller | default(false) | bool %}
+{% for key, value in kafka_controller.systemd_service.Service.items() %}
+{% if key != 'Environment' %}
+{% if value and value != '' %}
+{{ key }}={{ value }}
+{% endif %}
+{% else %}
+{% for env_key, env_value in value.items() %}
+{% if env_value and env_value != '' %}
+Environment="{{ env_key }}={{ env_value }}"
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% elif kafka_is_broker | default(false) | bool %}
+{% for key, value in kafka_broker.systemd_service.Service.items() %}
+{% if key != 'Environment' %}
+{% if value and value != '' %}
+{{ key }}={{ value }}
+{% endif %}
+{% else %}
+{% for env_key, env_value in value.items() %}
+{% if env_value and env_value != '' %}
+Environment="{{ env_key }}={{ env_value }}"
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+[Install]
+{% if kafka_is_controller | default(false) | bool %}
+{% for key, value in kafka_controller.systemd_service.Install.items() %}
+{% if value and value != '' %}
+{{ key }}={{ value }}
+{% endif %}
+{% endfor %}
+{% elif kafka_is_broker | default(false) | bool %}
+{% for key, value in kafka_broker.systemd_service.Install.items() %}
+{% if value and value != '' %}
+{{ key }}={{ value }}
+{% endif %}
+{% endfor %}
+{% endif %}

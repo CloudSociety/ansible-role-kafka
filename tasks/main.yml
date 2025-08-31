@@ -165,3 +165,18 @@
         group: "{{ kafka_install.group }}"
         recurse: true
       loop: "{{ kafka_controller_properties.log.dirs.split(',') }}"
+
+- name: Render out systemd service file tamplate
+  ansible.builtin.template:
+    src: "confluent-kafka.service.j2"
+    dest: "{{ kafka_files.systemd_service }}"
+    mode: '640'
+    owner: root
+    group: root
+  notify: Restart_kafka
+
+- name: Ensure Kakfa service is started and enabled
+  ansible.builtin.systemd_service:
+    name: "{{ kafka_files.systemd_service | basename }}"
+    enabled: true
+    state: "started"
