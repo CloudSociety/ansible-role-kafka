@@ -29,3 +29,26 @@
   delay: 5
   when:
     - ansible_os_family == "RedHat"
+
+- name: Make sure confluent repo exists
+  ansible.builtin.stat:
+    path: /etc/yum.repos.d/confluent.repo
+  register: confluent_yum_repo
+
+
+- name: Add confluent yum repository on RedHat based distros
+  when:
+    - ansible_os_family == "RedHat"
+    - kafka_install.method == "package"
+    - not confluent_yum_repo.stat.exists
+  block:
+    - name: Render out confluent yum repository template
+      ansible.builtin.template:
+        src: "confluent.repo.j2"
+        dest: "/etc/yum.repos.d/confluent.repo"
+        owner: root
+        group: root
+        mode: "0644"
+    - name: Update dnf cache to recognize confluent repository
+      ansible.builtin.dnf:
+        update_cache: true

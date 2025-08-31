@@ -1,0 +1,8 @@
+# Maintained by Ansible
+[Confluent]
+name = {{ kafka_repo_confluent_yum.description }}
+enabled = {{ kafka_repo_confluent_info.enabled | bool | int }}
+baseurl = {{ kafka_repo_confluent_info.baseurl }}/rpm/{{ kafka_repo_confluent_info.version | regex_replace('\\.\\d+$', '') }}
+gpgkey = {{ kafka_repo_confluent_files.gpgkey }}
+gpgcheck = {{ kafka_repo_confluent_info.gpgcheck_enabled | bool | int }}
+async = 1
