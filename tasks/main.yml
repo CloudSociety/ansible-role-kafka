@@ -93,3 +93,11 @@
       when:
         - kafka_is_controller | default(false) | bool
         - kafka_controller_full_pkgs is defined
+
+- name: Set Permissions on /var/lib/kafka
+  ansible.builtin.file:
+    path: /var/lib/kafka/
+    owner: "{{ kafka_install.user }}"
+    group: "{{ kafka_install.group }}"
+    state: directory
+    mode: '750'
