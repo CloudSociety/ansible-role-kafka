@@ -1,0 +1,15 @@
+---
+kafka_install:
+  method: "package" # only 'package' installation is supported for now
+  version: 7.9.0
+  group: "kafka"
+  user: "kafka"
+  user_login_shell: "/sbin/nologin"
+  rhl_java_package_name: "java-17-openjdk" # java-8-openjdk or java-11-openjdk or java-17-openjdk
+  broker_pkgs:
+    - "confluent-common"
+    - "confluent-kafka"
+    - "confluent-rebalancer"
+  controller_pkgs:
+    - "confluent-common"
+    - "confluent-kafka"

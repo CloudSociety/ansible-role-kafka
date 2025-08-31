@@ -7,3 +7,14 @@
     - inventory_hostname in groups[item]
     - item is search('kafka')
 
+- name: Create Kafka Broker group
+  ansible.builtin.group:
+    name: "{{ kafka_install.group }}"
+
+- name: Create Kafka Broker user
+  ansible.builtin.user:
+    name: "{{ kafka_install.user }}"
+    comment: Confluent Kafka
+    system: true
+    shell: "{{ kafka_install.user_login_shell }}"
+    group: "{{ kafka_install.group }}"
