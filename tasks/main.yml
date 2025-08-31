@@ -52,3 +52,44 @@
     - name: Update dnf cache to recognize confluent repository
       ansible.builtin.dnf:
         update_cache: true
+
+- name: Install Kafka packages using package manager on redhat bases distros
+  when:
+    - ansible_os_family == "RedHat"
+    - kafka_install.method == "package"
+  block:
+    - name: Set broker package list with version suffix
+      ansible.builtin.set_fact:
+        kafka_broker_full_pkgs: "{{ kafka_install.broker_pkgs | product(['-' + kafka_install.version + '-1']) | map('join') | list }}"
+
+    - name: Set controller package list with version suffix
+      ansible.builtin.set_fact:
+        kafka_controller_full_pkgs: "{{ kafka_install.controller_pkgs | product(['-' + kafka_install.version + '-1']) | map('join') | list }}"
+
+    - name: Install Kafka broker packages
+      ansible.builtin.dnf:
+        name: "{{ kafka_broker_full_pkgs }}"
+        state: latest
+      register: kafka_broker_install_result
+      until: kafka_broker_install_result is success or ansible_check_mode
+      retries: 5
+      delay: 5
+      ignore_errors: "{{ ansible_check_mode }}"
+      notify: Restart_kafka
+      when:
+        - kafka_is_broker | default(false) | bool
+        - kafka_broker_full_pkgs is defined
+
+    - name: Install Kafka controller packages
+      ansible.builtin.dnf:
+        name: "{{ kafka_controller_full_pkgs }}"
+        state: latest
+      register: kafka_controller_install_result
+      until: kafka_controller_install_result is success or ansible_check_mode
+      retries: 5
+      delay: 5
+      ignore_errors: "{{ ansible_check_mode }}"
+      notify: Restart_kafka
+      when:
+        - kafka_is_controller | default(false) | bool
+        - kafka_controller_full_pkgs is defined
