@@ -1,0 +1,26 @@
+---
+- name: Configure Kafka storage
+  block:
+    - name: Check if Data Directories are Formatted # noqa: command-instead-of-shell
+      ansible.builtin.shell: "/bin/kafka-storage info -c {{ kafka_files.server_conf }}"
+      ignore_errors: true
+      failed_when: false
+      register: formatted
+
+    - name: Generate uuid on first controller node in order to use it as ClusterId # noqa: command-instead-of-shell
+      ansible.builtin.shell: "/bin/kafka-storage random-uuid"
+      environment:
+        KAFKA_OPTS: "-Xlog:all=error -XX:+IgnoreUnrecognizedVMOptions"
+      register: uuid_key
+      run_once: true
+      changed_when: false
+      delegate_to: "{{ kafka_group_hosts | select('contains', 'controller') | list | sort | first }}"
+
+    - name: Format Data Directory
+      ansible.builtin.shell: |
+        /bin/kafka-storage format \
+        -t={{ uuid_key.stdout }} -c {{ kafka_files.server_conf }} --ignore-formatted
+      register: format_meta
+      when:
+        - formatted.rc == 1
+        - uuid_key is defined

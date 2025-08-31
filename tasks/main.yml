@@ -121,3 +121,7 @@
   when:
     - kafka_logging.custom_log4j.enabled | default(false) | bool
   notify: Restart_kafka
+
+- name: Include Kraft Cluster Data
+  ansible.builtin.include_tasks:
+    file: get_meta_properties.yml
