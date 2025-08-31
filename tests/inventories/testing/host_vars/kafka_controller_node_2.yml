@@ -1,1 +1,30 @@
 ---
+kafka_is_controller: true
+
+kafka_controller:
+  listeners:
+    controller:
+      name: "CONTROLLER"
+      ip: "192.168.60.105"
+      port: 9093
+      sasl_protocol: "PLAINTEXT" # GSSAPI or SCRAM-SHA-512 or SCRAM-SHA-256 or OAUTHBEARER or SASL_SSL or SASL_PLAINTEXT or SSL or PLAINTEXT
+  systemd_service:
+    Unit:
+      Description: "Apache Kafka - Kraft Controller"
+      Documentation: "https://kafka.apache.org/20/documentation.html"
+      After: "network.target"
+    Service:
+      Type: "simple"
+      User: "{{ kafka_install.user }}"
+      Group: "{{ kafka_install.group }}"
+      ExecStart: "{{ kafka_files.server_start }} {{ kafka_files.server_conf }}"
+      LimitNOFILE: 1000000
+      TimeoutStopSec: 180
+      Restart: "on-failer"
+      Environment:
+        KAFKA_HEAP_OPTS: "-Xms1536M -Xmx4g -XX:MetaspaceSize=96m -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35 -XX:G1HeapRegionSize=16M -XX:MinMetaspaceFreeRatio=50 -XX:MaxMetaspaceFreeRatio=80"
+        KAFKA_LOG4J_OPTS: "{% if kafka_logging.custom_log4j.enabled | default(false) | bool %}-Dlog4j.configuration=file:{{ kafka_files.log4j_conf }}{% endif %}"
+        LOG_DIR: "{{ kafka_logging.dir | regex_replace('\\/$', '') }}"
+        KAFKA_OPTS: "-Djava.net.preferIPv4Stack=true"
+    Install:
+      WantedBy: "multi-user.target"
