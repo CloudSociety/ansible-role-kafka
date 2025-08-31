@@ -13,3 +13,9 @@ kafka_install:
   controller_pkgs:
     - "confluent-common"
     - "confluent-kafka"
+
+kafka_files:
+  server_conf: "/etc/kafka/server.properties"
+  log4j_conf: "/etc/kafka/log4j.properties"
+  server_start: "/bin/kafka-server-start"
+  systemd_service: "/lib/systemd/system/confluent-kafka.service"
