@@ -1,2 +1,9 @@
 ---
-# tasks file for ansible-role-kafka
+- name: Get all hosts in the same kafka group as current host
+  ansible.builtin.set_fact:
+    kafka_group_hosts: "{{ groups[item] | sort }}"
+  loop: "{{ groups.keys() | list }}"
+  when:
+    - inventory_hostname in groups[item]
+    - item is search('kafka')
+
