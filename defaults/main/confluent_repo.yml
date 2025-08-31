@@ -1,0 +1,18 @@
+---
+kafka_repo_confluent_info:
+  enabled: 1
+  gpgcheck_enabled: 1
+  baseurl: "https://packages.confluent.io"
+  version: "7.9.0"
+
+kafka_repo_confluent_files:
+  archive: >-
+    {{ kafka_repo_confluent_info.baseurl }}/archive/
+    {{ kafka_repo_confluent_info.version | regex_replace('^([0-9])\\.([0-9]*).*', '\\1.\\2') }}/
+    confluent-community-{{ kafka_repo_confluent_info.version }}.tar.gz
+  gpgkey: "{{ kafka_repo_confluent_info.baseurl }}/rpm/{{ kafka_repo_confluent_info.version | regex_replace('\\.\\d+$', '') }}/archive.key"
+
+kafka_repo_confluent_yum:
+  description: "Confluent repository"
+  baseurl: "{{ kafka_repo_confluent_info.baseurl }}"
+  gpgkey: "{{ kafka_repo_confluent_files.gpgkey }}"
