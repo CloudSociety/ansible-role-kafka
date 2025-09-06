@@ -14,9 +14,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 # -*- mode: ruby -*-
-# vi: set ft=ruby :
-
-# For help on using kubespray with vagrant, check out docs/developers/vagrant.md
+# # vi: set ft=ruby :
 
 require 'fileutils'
 require 'ipaddr'
@@ -30,97 +28,76 @@ CONFIG = File.join(File.dirname(__FILE__), ENV['MOLECULE_VAGRANT_CONFIG'] || 'va
 DISK_UUID = Time.now.utc.to_i
 
 SUPPORTED_OS = {
-  "rockylinux9" => { box: "rockylinux/9", user: "vagrant" }
+  "rockylinux9"         => {box: "rockylinux/9",               user: "vagrant"}
 }
 
 if File.exist?(CONFIG)
   require CONFIG
 end
 
-# -----------------------------
-# Defaults for config options
-# -----------------------------
-# Separate prefixes for roles
-$broker_instance_name_prefix     ||= "kafka_broker_node"
-$controller_instance_name_prefix ||= "kafka_controller_node"
+def find_vbox_network()
+  Socket.getifaddrs.each do |iface|
+    # We are looking for a VirtualBox host-only interface
+    next unless iface.name.start_with?('vboxnet')
+    addr = iface.addr
+    next unless addr && addr.afamily == Socket::AF_INET
 
-$vm_gui                ||= false
-$vm_memory             ||= 1024
-$vm_cpus               ||= 1
-$forwarded_ports       ||= {}
-$subnet                ||= "192.168.60"
-$os                    ||= "rockylinux9"
+    host_ip = addr.ip_address
+    # For an IP like '192.168.39.1', the subnet prefix is '192.168.39'
+    subnet_prefix = host_ip.split('.')[0..2].join('.')
+    puts "Found VirtualBox network '#{iface.name}' with IP #{host_ip}. Using subnet #{subnet_prefix}.0/24."
+    return { subnet: subnet_prefix, gateway: host_ip }
+  end
 
-$first_node                 ||= 1
-$kafka_broker_instances     ||= 3
-$kafka_controller_instances ||= 3
-$first_kafka_broker         ||= 1
-$first_kafka_controller     ||= 4
+  return nil
+end
 
-# All nodes (brokers + controllers)
-$kafka_node_instances ||= $kafka_broker_instances + $kafka_controller_instances - $first_node + 1
+network_info = find_vbox_network()
 
-$override_disk_size   ||= false
-$disk_size            ||= 20480
-$ansible_verbosity    ||= false
-$ansible_tags         ||= ENV['VAGRANT_ANSIBLE_TAGS'] || ""
+if network_info.nil?
+  puts "Error: Could not find a VirtualBox host-only network interface (e.g., 'vboxnet0')."
+  puts "Please create one in VirtualBox: File -> Host Network Manager."
+  exit 1
+end
 
+$subnet  = network_info[:subnet]
+$gateway = network_info[:gateway]
+$dns_servers = "8.8.8.8 1.1.1.1"  # Space separated!
+
+# Defaults for config options defined in CONFIG
+$num_instances ||= 6
+$instance_name_prefix ||= "kafka"
+$vm_gui ||= false
+$vm_memory ||= 1024
+$vm_cpus ||= 1
+$shared_folders ||= {}
+$forwarded_ports ||= {}
+$os ||= "rockylinux9"
+$inventories ||= []
+$first_node ||= 1
+$first_kafka_broker ||= 1
+$first_kafka_controller ||= 4
+
+$kafka_broker_instances ||= [$num_instances, 3].min
+$kafka_broker_instances_name ||= "#{[$instance_name_prefix, '-broker'].join('')}"
+$kafka_controller_instances ||= [$num_instances, 3].min
+$kafka_controller_instances_name ||= "#{[$instance_name_prefix, '-ctrl'].join('')}"
+$kafka_node_instances ||= $num_instances - $first_node + 1
+
+$override_disk_size ||= false
+$disk_size ||= 20480
+$local_path_provisioner_enabled ||= "False"
+$local_path_provisioner_claim_root ||= "/opt/local-path-provisioner/"
+$ansible_verbosity ||= false
+$ansible_tags ||= ENV['VAGRANT_ANSIBLE_TAGS'] || ""
 $vagrant_dir ||= File.join(File.dirname(__FILE__), ".vagrant")
+$playbook ||= "cluster.yml"
+$extra_vars ||= {}
 
-$playbook    ||= "tests/playbooks/kafka_cluster.yml"
-$inventory   ||= "tests/inventories/testing"
-$extra_vars  ||= {}
+host_vars = {}
 
-# -----------------------------
-# Helpers
-# -----------------------------
-def collect_networks(subnet)
-  ip_test = IPAddr.new("#{subnet}.0")
-  Socket.getifaddrs.each_with_object([]) do |iface, acc|
-    addr    = iface.addr
-    netmask = iface.netmask
-    next unless addr && netmask && addr.afamily == Socket::AF_INET
-
-    begin
-      ip     = IPAddr.new(addr.ip_address)
-      prefix = IPAddr.new(netmask.ip_address).to_i.to_s(2).count('1')
-      network = IPAddr.new("#{ip.mask(prefix)}/#{prefix}")
-      acc << [network, ip_test]
-    rescue ArgumentError
-      next
-    end
-  end
-end
-
-def subnet_in_use?(network_ips)
-  network_ips.any? { |net, test_ip| net.include?(test_ip) }
-end
-
-def should_check_subnet?
-  cmd = (ARGV[0] || "").to_s
-  return false if ENV["VAGRANT_NO_SUBNET_CHECK"] == "1"
-  %w[up reload resume].include?(cmd)
-end
-
-# -----------------------------
-# Subnet collision check
-# -----------------------------
-if should_check_subnet?
-  network_ips = collect_networks($subnet)
-  if subnet_in_use?(network_ips)
-    msg = <<~MSG
-      Invalid subnet: #{$subnet}.0/24 is already in use on the host.
-      Conflicting networks detected: #{network_ips.map { |net, _| net.to_s }.uniq.join(', ')}
-      (Set VAGRANT_NO_SUBNET_CHECK=1 to bypass this check — not recommended.)
-    MSG
-    abort msg  # prints the message to STDERR and exits with code 1
-  end
-end
-
-# -----------------------------
-# OS check
-# -----------------------------
-unless SUPPORTED_OS.key?($os)
+# throw error if os is not supported
+if ! SUPPORTED_OS.key?($os)
   puts "Unsupported OS: #{$os}"
   puts "Supported OS are: #{SUPPORTED_OS.keys.join(', ')}"
   exit 1
@@ -128,121 +105,167 @@ end
 
 $box = SUPPORTED_OS[$os][:box]
 
-# -----------------------------
-# Vagrant config
-# -----------------------------
+if Vagrant.has_plugin?("vagrant-proxyconf")
+  $no_proxy = ENV['NO_PROXY'] || ENV['no_proxy'] || "127.0.0.1,localhost"
+  (1..$num_instances).each do |i|
+      $no_proxy += ",#{$subnet}.#{i+100}"
+  end
+end
+
 Vagrant.configure("2") do |config|
+  puts "Configuring VMs on the #{$subnet}.0/24 network with gateway #{$gateway}"
+
   config.vm.box = $box
-  config.vm.box_check_update = false
-  if SUPPORTED_OS[$os].key?(:box_url)
+  if SUPPORTED_OS[$os].has_key? :box_url
     config.vm.box_url = SUPPORTED_OS[$os][:box_url]
   end
   config.ssh.username = SUPPORTED_OS[$os][:user]
 
-  # plugin conflict
-  if Vagrant.has_plugin?("vagrant-vbguest")
+  if Vagrant.has_plugin?("vagrant-vbguest") then
     config.vbguest.auto_update = false
   end
 
-  # always use Vagrant's insecure key
   config.ssh.insert_key = false
 
-  if $override_disk_size
+  if ($override_disk_size)
     unless Vagrant.has_plugin?("vagrant-disksize")
       system "vagrant plugin install vagrant-disksize"
     end
     config.disksize.size = $disk_size
   end
 
-  (1..$kafka_node_instances).each do |i|
-    is_broker = i.between?($first_kafka_broker, $first_kafka_broker + $kafka_broker_instances - 1)
-    is_controller   = i.between?($first_kafka_controller, $first_kafka_controller + $kafka_controller_instances -    1)
+  (1..$num_instances).each do |i|
+    if i.between?($first_kafka_broker, $kafka_broker_instances)
+	vm_name = "#{$kafka_broker_instances_name}%02d" % i
+    elsif i.between?($first_kafka_controller, $num_instances)
+	vm_name = "#{$kafka_controller_instances_name}%02d" % (i - $kafka_broker_instances)
+    else
+	vm_name = "%s-%01d" % [$instance_name_prefix, i]
+    end
 
-    raise "Index #{i} not in broker/controller ranges" unless is_broker || is_controller
+    config.vm.define vm_name do |node|
 
-    role_idx =
-      if is_broker
-        i - $first_kafka_broker + 1   # 1..$kafka_broker_instances
-      else
-        i - $first_kafka_controller + 1  # 1..$kafka_controller_instances
+      node.vm.hostname = vm_name
+
+      if Vagrant.has_plugin?("vagrant-proxyconf")
+        node.proxy.http     = ENV['HTTP_PROXY'] || ENV['http_proxy'] || ""
+        node.proxy.https    = ENV['HTTPS_PROXY'] || ENV['https_proxy'] ||  ""
+        node.proxy.no_proxy = $no_proxy
       end
 
-prefix  = is_broker ? $broker_instance_name_prefix : $controller_instance_name_prefix
-vm_name = "#{prefix}_#{role_idx}"   # e.g., kafka_broker_node_1, kafka_controller_node_1
-
-config.vm.define vm_name do |node|
-    host_name = vm_name.tr("_", "-")
-    node.vm.hostname = host_name
-
       node.vm.provider :virtualbox do |vb|
-        vb.check_guest_additions = false
-        vb.memory                = $vm_memory
-        vb.cpus                  = $vm_cpus
-        vb.gui                   = $vm_gui
-        vb.linked_clone          = true
+	vb.name = vm_name
+        vb.memory = $vm_memory
+        vb.cpus = $vm_cpus
+        vb.gui = $vm_gui
+        vb.linked_clone = true
         vb.customize ["modifyvm", :id, "--vram", "8"]
         vb.customize ["modifyvm", :id, "--audio", "none"]
+        vb.customize ['storagectl', :id, '--name', 'SATA Controller', '--add', 'sata', '--controller', 'IntelAhci', '--portcount', '8']
+      end
+
+      if $expose_docker_tcp
+        node.vm.network "forwarded_port", guest: 2375, host: ($expose_docker_tcp + i - 1), auto_correct: true
       end
 
       $forwarded_ports.each do |guest, host|
         node.vm.network "forwarded_port", guest: guest, host: host, auto_correct: true
       end
 
-      # Turn off the implicit default share
-      config.vm.synced_folder ".", "/vagrant", disabled: true
-
+      if ["rhel8"].include? $os
+        node.vm.synced_folder ".", "/vagrant", disabled: false
+        $shared_folders.each do |src, dst|
+          node.vm.synced_folder src, dst
+        end
+      else
+        node.vm.synced_folder ".", "/vagrant", disabled: false, type: "rsync", rsync__args: ['--verbose', '--archive', '--delete', '-z'] , rsync__exclude: ['.git','venv']
+        $shared_folders.each do |src, dst|
+          node.vm.synced_folder src, dst, type: "rsync", rsync__args: ['--verbose', '--archive', '--delete', '-z']
+        end
+      end
+      
       ip = "#{$subnet}.#{i+100}"
-      node.vm.network :private_network, ip: ip
+      node.vm.network :private_network,
+        :ip => ip
 
-      # Disable swap
+      # Disable swap for each vm
       node.vm.provision "shell", inline: "swapoff -a"
 
-      # Disable firewalld on RHEL-based distros
+
+      node.vm.provision "shell", path: "detect_nm_dev.sh", env: {
+	"DNS_SERVERS" => $dns_servers
+      }
+
+      # Provisioning block to update system and install base packages based on OS
+      node.vm.provision "shell", inline: <<-SHELL
+	echo ">>> Checking for package manager..."
+
+	if command -v dnf &> /dev/null; then
+	  # --- Red Hat-based Systems (dnf) ---
+	  echo "DNF detected. Running updates for Red Hat-based OS."
+	  dnf clean all
+	  dnf makecache
+	  dnf update -y
+	  dnf install -y net-tools vim curl wget git
+
+	elif command -v apt-get &> /dev/null; then
+	  # --- Debian-based Systems (apt) ---
+	  echo "APT detected. Running updates for Debian-based OS."
+	  export DEBIAN_FRONTEND=noninteractive
+	  apt-get clean
+	  apt-get update -y
+	  apt-get upgrade -y
+	  apt-get install -y net-tools vim curl wget git
+
+	else
+	  echo "Unsupported package manager. Cannot provision packages." >&2
+	  exit 1
+	fi
+
+	echo ">>> System provisioning complete."
+      SHELL
+
+
+      # Disable firewalld on redhat based vms
       if ["rhel8","rockylinux8","rhel9","rockylinux9"].include? $os
         node.vm.provision "shell", inline: "systemctl stop firewalld; systemctl disable firewalld"
       end
 
-      # Run Ansible once after all machines are up
-      if i == $kafka_node_instances
+      host_vars[vm_name] = {
+        "ip": ip,
+        "download_localhost": "False",
+        "local_path_provisioner_enabled": "#{$local_path_provisioner_enabled}",
+        "local_path_provisioner_claim_root": "#{$local_path_provisioner_claim_root}",
+        "ansible_ssh_user": SUPPORTED_OS[$os][:user],
+        "ansible_ssh_private_key_file": File.join(Dir.home, ".vagrant.d", "insecure_private_key"),
+        "unsafe_show_logs": "True"
+      }
 
-        # Sweet trick to find vagrant forwarded nat ssh ports ;)
+      if i == $num_instances
         node.vm.provision "ansible" do |ansible|
-          ansible.playbook           = "tests/internal/pwd-local.yml"
-          ansible.become             = false
+          ansible.playbook = $playbook
           ansible.compatibility_mode = "2.0"
-          ansible.inventory_path     = "tests/internal/inventory.ini"
-          ansible.raw_arguments      = [
-            "--connection=local",
-            "--inventory=127.0.0.1",
-            "--limit=127.0.0.1",
-            "-i", "ansible_hosts"
-          ]
-          ansible.force_remote_user  = false
-          ansible.host_key_checking  = false
-        end
-
-        node.vm.provision "ansible" do |ansible|
-          ansible.playbook           = $playbook
-          ansible.become             = true
-          ansible.compatibility_mode = "2.0"
-          ansible.config_file        = "tests/ansible.cfg"
-          ansible.extra_vars         = $extra_vars
-          ansible.inventory_path     = $inventory
-          ansible.limit              = "all,localhost"
-          ansible.raw_arguments      = [
-            "--forks=#{$kafka_node_instances}",
-            "--flush-cache",
-            "-e", "ansible_become_pass=vagrant",
-            "-e", "ansible_ssh_common_args=-F#{$vagrant_dir}/ssh-config"
-          ]
-          ansible.tags               = [$ansible_tags] if $ansible_tags != ""
-          ansible.verbose            = $ansible_verbosity
-          ansible.ask_become_pass    = false
-          ansible.ask_vault_pass     = false
-          ansible.force_remote_user  = false
-          ansible.host_key_checking  = false
+          ansible.verbose = $ansible_verbosity
+          ansible.become = true
+          ansible.limit = "all,localhost"
+          ansible.host_key_checking = false
+          ansible.raw_arguments = ["--forks=#{$num_instances}",
+                                   "--flush-cache",
+                                   "-e ansible_become_pass=vagrant"] +
+                                   $inventories.map {|inv| ["-i", inv]}.flatten
+          ansible.host_vars = host_vars
+          ansible.extra_vars = $extra_vars
+          if $ansible_tags != ""
+            ansible.tags = [$ansible_tags]
+          end
+          ansible.groups = {
+            "kafka_broker" => (1..$kafka_broker_instances).map { |n| sprintf("#{$kafka_broker_instances_name}%02d", n) },
+            "kafka_controller" => (1..$kafka_controller_instances).map { |n| sprintf("#{$kafka_controller_instances_name}%02d", n) },
+            "kafka_cluster:children" => ["kafka_broker", "kafka_controller"],
+          }
         end
       end
+
     end
   end
 end
