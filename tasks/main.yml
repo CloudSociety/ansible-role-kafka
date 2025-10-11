@@ -117,6 +117,21 @@
     state: directory
     mode: '750'
 
+- name: Inlcude kafka SASL_SSL mode
+  ansible.builtin.include_tasks: "tls_broker.yml"
+  when:
+    - kafka_sasl_ssl_mode
+    - kafka_is_broker
+  tags: ssl_sasl_kafka
+
+- name: Inlcude kafka PEM generation for app layer
+  ansible.builtin.include_tasks: "gen_pem.yml"
+  when:
+    - kafka_sasl_ssl_mode
+    - kafka_is_broker
+    - kafka_client_use
+  tags: pem_gen
+
 - name: Render out kafka server properties
   ansible.builtin.template:
     src: server.properties.j2
@@ -125,6 +140,16 @@
     owner: "{{ kafka_install.user }}"
     group: "{{ kafka_install.group }}"
   notify: Restart_kafka
+
+- name: Render out kafka jaas config
+  ansible.builtin.template:
+    src: kafka_server_jaas.conf.j2
+    dest: "{{ kafka_files.jaas_server_conf }}"
+    mode: '640'
+    owner: "{{ kafka_install.user }}"
+    group: "{{ kafka_install.group }}"
+  when: kafka_sasl_ssl_mode
+  tags: ssl_sasl_kafka
 
 - name: Render out kafka log4j custom properties
   ansible.builtin.template:
@@ -181,6 +206,13 @@
         recurse: true
       loop: "{{ kafka_controller_properties.log.dirs.split(',') }}"
 
+- name: Include controller node-checker for brokers to not being crashed
+  ansible.builtin.include_tasks:
+    file: controller_health_chk.yml
+  when:
+    - kafka_controller_check
+    - kafka_is_broker
+
 - name: Render out systemd service file tamplate
   ansible.builtin.template:
     src: "confluent-kafka.service.j2"
@@ -189,6 +221,20 @@
     owner: root
     group: root
   notify: Restart_kafka
+
+- name: Ensure /tmp is mounted with exec permissions
+  ansible.posix.mount:
+    path: /tmp
+    src: tmpfs
+    fstype: tmpfs
+    opts: defaults,rw,nosuid,nodev,relatime
+    state: present
+  notify: Remount tmp
+
+- name: Reload the daemon for apply the /tmp changes
+  ansible.builtin.systemd:
+    daemon_reload: true
+  notify: Remount tmp
 
 - name: Ensure Kakfa service is started and enabled
   ansible.builtin.systemd_service:

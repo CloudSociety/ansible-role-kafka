@@ -14,18 +14,57 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ---
+kafka_controller_check: true
+kafka_controller_check_path_dir: "/etc/kafka/checks"
+kafka_controller_check_script_path: "{{ kafka_controller_check_path_dir }}/controller_check.sh"
+kafka_controller_check_script_timeout: 300 # Total wait time in seconds
+kafka_controller_check_script_interval: 5 # Time between checks in seconds
+
+kafka_sasl_ssl_mode: true
+kafka_client_use: false
+kafka_localhost_user: "user"
+kafka_localhost_user_pass: "secret"
+kafka_inter_broker_username: "secret"
+kafka_inter_broker_pass: "secret"
+
+kafka_broker_users:
+  - { client_username: "user", client_pass: "secret" }
+
+kafka_certs_dir: "/etc/kafka/certs"
+kafka_certs_privkey: "{{ kafka_certs_dir }}/kafka.key"
+kafka_certs_crt: "{{ kafka_certs_dir }}/kafka.crt"
+kafka_certs_server_truststore: "{{ kafka_certs_dir }}/server.truststore.jks"
+kafka_certs_client_truststore: "{{ kafka_certs_dir }}/client.truststore.jks"
+kafka_certs_server_keystore: "{{ kafka_certs_dir }}/server.keystore.jks"
+kafka_exported_keystore_cert_file: "{{ kafka_certs_dir }}/cert-keystore"
+kafka_signed_keystore_cert_file: "{{ kafka_certs_dir }}/cert-keystore-signed"
+kafka_client_pem_pkcs12: "{{ kafka_certs_dir }}/pem/client.p12"
+kafka_client_pem_pkcs12_cert: "{{ kafka_certs_dir }}/pem/client.cer.pem"
+kafka_client_pem_pkcs12_key: "{{ kafka_certs_dir }}/pem/client.key.pem"
+kafka_client_pem_pkcs12_ts_ca: "{{ kafka_certs_dir }}/pem/server.p12"
+kafka_client_pem_pkcs12_ca: "{{ kafka_certs_dir }}/pem/ca-cert.pem"
+kafka_identification_algorithm: "https"
+kafka_sasl_enabled_mechanism: "PLAIN"
+kafka_inter_broker_protocol: "SSL"
+
+kafka_client_pem_pkcs12_pass: "{{ kafka_server_keystore_pass }}"
+kafka_privkey_pass: "secret"
+kafka_client_truststore_pass: "secret"
+kafka_server_truststore_pass: "secret"
+kafka_server_keystore_pass: "secret"
+
 kafka_broker:
   listeners:
     internal:
-      name: "INTERNAL"
+      name: "{{ 'SSL' if kafka_sasl_ssl_mode else 'INTERNAL' }}"
       ip: "{{ ansible_host }}"
       port: 9092
-      sasl_protocol: "PLAINTEXT" # GSSAPI or SCRAM-SHA-512 or SCRAM-SHA-256 or OAUTHBEARER or SASL_SSL or SASL_PLAINTEXT or SSL or PLAINTEXT
+      sasl_protocol: "{{ 'SSL' if kafka_sasl_ssl_mode else 'PLAINTEXT' }}" # GSSAPI or SCRAM-SHA-512 or SCRAM-SHA-256 or OAUTHBEARER or SASL_SSL or SASL_PLAINTEXT or SSL or PLAINTEXT
     broker:
-      name: "BROKER"
+      name: "{{ 'SASL_SSL' if kafka_sasl_ssl_mode else 'BROKER' }}"
       ip: "{{ ansible_host }}"
       port: 9091
-      sasl_protocol: "PLAINTEXT" # GSSAPI or SCRAM-SHA-512 or SCRAM-SHA-256 or OAUTHBEARER or SASL_SSL or SASL_PLAINTEXT or SSL or PLAINTEXT
+      sasl_protocol: "{{ 'SASL_SSL' if kafka_sasl_ssl_mode else 'PLAINTEXT' }}" # GSSAPI or SCRAM-SHA-512 or SCRAM-SHA-256 or OAUTHBEARER or SASL_SSL or SASL_PLAINTEXT or SSL or PLAINTEXT
   systemd_service:
     Unit:
       Description: "Apache Kafka - Broker"
@@ -43,7 +82,9 @@ kafka_broker:
         KAFKA_HEAP_OPTS: "-Xms1g -Xmx6g -XX:MetaspaceSize=96m -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35 -XX:G1HeapRegionSize=16M -XX:MinMetaspaceFreeRatio=50 -XX:MaxMetaspaceFreeRatio=80"
         KAFKA_LOG4J_OPTS: "{% if kafka_logging.custom_log4j.enabled | default(false) | bool %}-Dlog4j.configuration=file:{{ kafka_files.log4j_conf }}{% endif %}"
         LOG_DIR: "{{ kafka_logging.dir | regex_replace('\\/$', '') }}"
-        KAFKA_OPTS: "-Djava.net.preferIPv4Stack=true"
+        KAFKA_OPTS: >-
+          -Djava.net.preferIPv4Stack=true{% if kafka_sasl_ssl_mode %}
+          -Djava.security.auth.login.config={{ kafka_files.jaas_server_conf }}{% endif %}
     Install:
       WantedBy: "multi-user.target"
 
@@ -669,7 +710,7 @@ kafka_broker_properties:
         handler:
           class: ""
     enabled:
-      mechanisms: ""
+      mechanisms: "{{ kafka_sasl_enabled_mechanism if kafka_sasl_ssl_mode else '' }}"
     jaas:
       config: ""
     kerberos:
@@ -717,10 +758,10 @@ kafka_broker_properties:
           ms: ""
     mechanism:
       controller:
-        protocol: "PLAIN"
+        protocol: "{{ kafka_sasl_enabled_mechanism if kafka_sasl_ssl_mode else 'PLAIN' }}"
       inter:
         broker:
-          protocol: "PLAIN"
+          protocol: ""
     oauthbearer:
       clock:
         skew:
@@ -787,12 +828,12 @@ kafka_broker_properties:
     cipher:
       suites: ""
     client:
-      auth: ""
+      auth: "{{ 'required' if kafka_sasl_ssl_mode else '' }}"
     enabled:
       protocols: ""
     endpoint:
       identification:
-        algorithm: ""
+        algorithm: "{{ kafka_identification_algorithm if kafka_sasl_ssl_mode else '' }}"
     engine:
       factory:
         class: ""
@@ -804,9 +845,9 @@ kafka_broker_properties:
       certificate:
         chain: ""
       key: ""
-      location: ""
-      password: ""
-      type: ""
+      location: "{{ kafka_certs_server_keystore if kafka_sasl_ssl_mode else '' }}"
+      password: "{{ kafka_server_keystore_pass if kafka_sasl_ssl_mode else '' }}"
+      type: "{{ 'JKS' if kafka_sasl_ssl_mode else '' }}"
     principal:
       mapping:
         rules: ""
@@ -819,9 +860,9 @@ kafka_broker_properties:
       algorithm: ""
     truststore:
       certificates: ""
-      location: ""
-      password: ""
-      type: ""
+      location: "{{ kafka_certs_server_truststore if kafka_sasl_ssl_mode else '' }}"
+      password: "{{ kafka_server_truststore_pass if kafka_sasl_ssl_mode else '' }}"
+      type: "{{ 'JKS' if kafka_sasl_ssl_mode else '' }}"
   telemetry:
     max:
       bytes: ""

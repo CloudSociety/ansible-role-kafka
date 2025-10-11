@@ -1,0 +1,94 @@
+---
+
+- name: Create pem dir for pem certs
+  ansible.builtin.file:
+    state: directory
+    owner: "{{ kafka_install.user }}"
+    group: "{{ kafka_install.group }}"
+    mode: "0700"
+    path: "{{ kafka_certs_dir }}/pem"
+  tags: pem_test
+
+- name: Find all keys and certs with ext .pem and .p12
+  ansible.builtin.find:
+    patterns:
+      - '*.p12'
+      - '*.pem'
+    paths:
+      - "{{ kafka_certs_dir }}/pem"
+  register: pkcs_pem_files
+  tags: pem_test
+
+- name: Delete all found .pem and .p12 files at {{ kafka_certs_dir }}/pem
+  ansible.builtin.file:
+    state: absent
+    path: "{{ item.path }}"
+  loop: "{{ pkcs_pem_files.files }}"
+  tags: pem_test
+
+- name: Convert the client entry from server.keystore.jks to PKCS12
+  ansible.builtin.command:
+    argv:
+      - keytool
+      - -importkeystore
+      - -srckeystore
+      - "{{ kafka_certs_server_keystore }}"
+      - -destkeystore
+      - "{{ kafka_client_pem_pkcs12 }}"
+      - -deststoretype
+      - PKCS12
+      - -srcalias
+      - localhost
+      - -srcstorepass
+      - "{{ kafka_server_keystore_pass }}"
+      - -deststorepass
+      - "{{ kafka_client_pem_pkcs12_pass }}"
+      - -srckeypass
+      - "{{ kafka_server_keystore_pass }}"
+      - -destkeypass
+      - "{{ kafka_client_pem_pkcs12_pass }}"
+      - --noprompt
+    creates: "{{ kafka_client_pem_pkcs12 }}"
+  tags: pem_test
+
+- name: Extract client certificate from PKCS12
+  ansible.builtin.command:
+    cmd: >
+      openssl pkcs12 -in {{ kafka_client_pem_pkcs12 }} -nokeys -out {{ kafka_client_pem_pkcs12_cert }}
+      -passin pass:{{ kafka_client_pem_pkcs12_pass }}
+    creates: "{{ kafka_client_pem_pkcs12_cert }}"
+  tags: pem_test
+
+- name: Extract client private key from PKCS12
+  ansible.builtin.command:
+    cmd: >
+      openssl pkcs12 -in {{ kafka_client_pem_pkcs12 }} -nodes -nocerts -out {{ kafka_client_pem_pkcs12_key }}
+      -passin pass:{{ kafka_client_pem_pkcs12_pass }}
+    creates: "{{ kafka_client_pem_pkcs12_key }}"
+  tags: pem_test
+
+- name: Convert the CA entry from client.truststore.jks to PKCS12
+  ansible.builtin.command:
+    argv:
+      - keytool
+      - -importkeystore
+      - -srckeystore
+      - "{{ kafka_certs_client_truststore }}"
+      - -destkeystore
+      - "{{ kafka_client_pem_pkcs12_ts_ca }}"
+      - -deststoretype
+      - PKCS12
+      - -deststorepass
+      - "{{ kafka_client_truststore_pass }}"
+      - -srcstorepass
+      - "{{ kafka_client_truststore_pass }}"
+    creates: "{{ kafka_client_pem_pkcs12_ts_ca }}"
+  tags: pem_test
+
+- name: Fetch CA from pkcs12 of client
+  ansible.builtin.command:
+    cmd: >
+      openssl pkcs12 -in {{ kafka_client_pem_pkcs12_ts_ca }} -nokeys -out {{ kafka_client_pem_pkcs12_ca }}
+      -passin pass:{{ kafka_client_truststore_pass }}
+    creates: "{{ kafka_client_pem_pkcs12_ca }}"
+  tags: pem_test

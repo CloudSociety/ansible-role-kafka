@@ -1,0 +1,19 @@
+
+- name: Create conrtoller node checker-script for brokers to run after controllers
+  tags: kafka_check_script
+  block:
+    - name: Make sure dir {{ kafka_controller_check_path_dir }} exists
+      ansible.builtin.file:
+        state: directory
+        path: "{{ kafka_controller_check_path_dir }}"
+        mode: "0700"
+        owner: "{{ kafka_install.user }}"
+        group: "{{ kafka_install.group }}"
+
+    - name: Render checker script
+      ansible.builtin.template:
+        src: "controller_check.sh.j2"
+        dest: "{{ kafka_controller_check_script_path }}"
+        mode: "0500"
+        owner: "{{ kafka_install.user }}"
+        group: "{{ kafka_install.group }}"

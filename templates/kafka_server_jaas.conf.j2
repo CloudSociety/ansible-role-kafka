@@ -1,0 +1,8 @@
+KafkaServer {
+   org.apache.kafka.common.security.plain.PlainLoginModule required
+   username="{{ kafka_inter_broker_username}}"
+   password="{{ kafka_inter_broker_pass }}"
+{% for user in kafka_broker_users %}
+   user_{{ user.client_username }}="{{ user.client_pass }}"{% if not loop.last %};{% else %};{% endif %}
+{% endfor %}
+};
