@@ -14,6 +14,12 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ---
+kafka_controller_check: true
+kafka_controller_check_path_dir: "/etc/kafka/checks"
+kafka_controller_check_script_path: "{{ kafka_controller_check_path_dir }}/controller_check.sh"
+kafka_controller_check_script_timeout: 300 # Total wait time in seconds
+kafka_controller_check_script_interval: 5 # Time between checks in seconds
+
 kafka_sasl_ssl_mode: true
 kafka_client_use: false
 kafka_localhost_user: "user"
@@ -27,13 +33,11 @@ kafka_broker_users:
 kafka_certs_dir: "/etc/kafka/certs"
 kafka_certs_privkey: "{{ kafka_certs_dir }}/kafka.key"
 kafka_certs_crt: "{{ kafka_certs_dir }}/kafka.crt"
-kafka_certs_pkcs12: "{{ kafka_certs_dir }}/kafka.p12"
 kafka_certs_server_truststore: "{{ kafka_certs_dir }}/server.truststore.jks"
 kafka_certs_client_truststore: "{{ kafka_certs_dir }}/client.truststore.jks"
 kafka_certs_server_keystore: "{{ kafka_certs_dir }}/server.keystore.jks"
 kafka_exported_keystore_cert_file: "{{ kafka_certs_dir }}/cert-keystore"
 kafka_signed_keystore_cert_file: "{{ kafka_certs_dir }}/cert-keystore-signed"
-kafka_certs_csr: "{{ kafka_certs_dir }}/kafka.csr"
 kafka_client_pem_pkcs12: "{{ kafka_certs_dir }}/pem/client.p12"
 kafka_client_pem_pkcs12_cert: "{{ kafka_certs_dir }}/pem/client.cer.pem"
 kafka_client_pem_pkcs12_key: "{{ kafka_certs_dir }}/pem/client.key.pem"

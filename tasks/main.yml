@@ -206,6 +206,13 @@
         recurse: true
       loop: "{{ kafka_controller_properties.log.dirs.split(',') }}"
 
+- name: Include controller node-checker for brokers to not being crashed
+  ansible.builtin.include_tasks:
+    file: controller_health_chk.yml
+  when:
+    - kafka_controller_check
+    - kafka_is_broker
+
 - name: Render out systemd service file tamplate
   ansible.builtin.template:
     src: "confluent-kafka.service.j2"
@@ -214,6 +221,20 @@
     owner: root
     group: root
   notify: Restart_kafka
+
+- name: Ensure /tmp is mounted with exec permissions
+  ansible.posix.mount:
+    path: /tmp
+    src: tmpfs
+    fstype: tmpfs
+    opts: defaults,rw,nosuid,nodev,relatime
+    state: present
+  notify: Remount tmp
+
+- name: Reload the daemon for apply the /tmp changes
+  ansible.builtin.systemd:
+    daemon_reload: true
+  notify: Remount tmp
 
 - name: Ensure Kakfa service is started and enabled
   ansible.builtin.systemd_service:

@@ -19,3 +19,8 @@
     name: "{{ kafka_files.systemd_service | basename }}"
     state: restarted
     daemon_reload: true
+
+- name: Remount tmp
+  ansible.posix.mount:
+    path: /tmp
+    state: remounted
