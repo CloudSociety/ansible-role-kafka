@@ -1,0 +1,210 @@
+---
+
+- name: Make sure openssl and keytools is present
+  ansible.builtin.dnf:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - openssl
+    - "{{ kafka_install.rhl_java_package_name }}"
+  tags: ssl_sasl_kafka
+
+- name: Make sure openssl and keytools is present on localhost # need to add localrepo on ansible executor
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - openssl
+    - "{{ java_package_name }}"
+  delegate_to: localhost
+  run_once: true
+  vars:
+    - ansible_user: "{{ kafka_localhost_user }}"
+    - ansible_become_password: "{{ kafka_localhost_user_pass }}"
+    - package_names:
+        Debian: openjdk-17-jdk
+        Redhat: java-17-openjdk
+    - java_package_name: "{{ package_names[hostvars['localhost']['ansible_os_family']] }}"
+  tags: ssl_sasl_kafka
+
+- name: Create certs directory
+  ansible.builtin.file:
+    state: directory
+    mode: "0700"
+    owner: "{{ kafka_install.user }}"
+    group: "{{ kafka_install.group }}"
+    path: "{{ kafka_certs_dir }}"
+  tags: ssl_sasl_kafka
+
+- name: Find all files in certs dir
+  ansible.builtin.find:
+    paths: "{{ kafka_certs_dir }}"
+    file_type: file
+  register: found_certs
+  tags: ssl_sasl_kafka
+
+- name: Delete all cert files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ found_certs.files }}"
+  tags: ssl_sasl_kafka
+
+- name: Find all certs located on localhost files # have to run once
+  ansible.builtin.find:
+    path: "{{ role_path }}/files"
+    file_type: file
+  register: found_localhost_certs
+  delegate_to: localhost
+  run_once: true
+  vars:
+    - ansible_user: "{{ kafka_localhost_user }}"
+    - ansible_become_password: "{{ kafka_localhost_user_pass }}"
+  tags: ssl_sasl_kafka
+
+- name: Delete all certs located on localhost files # have to run once
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ found_localhost_certs.files }}"
+  delegate_to: localhost
+  run_once: true
+  vars:
+    - ansible_user: "{{ kafka_localhost_user }}"
+    - ansible_become_password: "{{ kafka_localhost_user_pass }}"
+  tags: ssl_sasl_kafka
+
+- name: Generate CA and private key using keytool
+  ansible.builtin.command:
+    cmd: >
+      keytool -keystore {{ kafka_certs_server_keystore }}
+      -storepass {{ kafka_server_keystore_pass }} -keypass {{ kafka_server_keystore_pass }} -alias localhost
+      -validity 3650 -genkey -keyalg RSA -dname "CN={{ ansible_fqdn }}, OU=DevOps, O=BBDH, L=TEH, S=TEH, C=IR"
+      -ext "SAN=IP:{{ ansible_host }},IP:{{ haproxy_keepalived_cluster_vip }},IP:{{ hostvars['unit_19_g10_haproxy_node_0'].ansible_host }},IP:{{ hostvars['unit_19_g10_haproxy_node_1'].ansible_host }}"
+    creates: "{{ kafka_certs_server_keystore }}"
+  tags: ssl_sasl_kafka
+
+- name: Generate CA and private key using openssl for signing # have to run once
+  ansible.builtin.command:
+    cmd: >
+      openssl req -new -x509 -keyout {{ role_path }}/files/kafka.key -out {{ role_path }}/files/kafka.crt
+      -days 3650 -subj "/C=IR/ST=TEH/L=TEH/O=BBDH/OU=DevOps/CN=localhost" -passout pass:{{ kafka_privkey_pass }}
+    creates:
+      - "{{ role_path }}/files/kafka.key"
+      - "{{ role_path }}/files/kafka.crt"
+  delegate_to: localhost
+  run_once: true
+  vars:
+    - ansible_user: "{{ kafka_localhost_user }}"
+    - ansible_become_password: "{{ kafka_localhost_user_pass }}"
+  tags: ssl_sasl_kafka
+
+- name: Export CSR from keystore
+  ansible.builtin.command:
+    cmd: >
+      keytool -keystore {{ kafka_certs_server_keystore }}
+      -alias localhost -certreq -file {{ kafka_exported_keystore_cert_file }} -storepass {{ kafka_server_keystore_pass }}
+    creates:
+      - "{{ kafka_exported_keystore_cert_file }}"
+  tags: ssl_sasl_kafka
+
+- name: Fetch the certs came from keystore
+  ansible.builtin.fetch:
+    src: "{{ kafka_exported_keystore_cert_file }}"
+    dest: "{{ role_path }}/files/{{ inventory_hostname }}-keystore-cert"
+    flat: true
+  tags: ssl_sasl_kafka
+
+- name: Create custom OpenSSL config file for SAN signing
+  ansible.builtin.copy:
+    dest: "{{ role_path }}/files/openssl_san.cnf"
+    content: |
+      [ v3_req_custom ]
+      basicConstraints = CA:FALSE
+      keyUsage = digitalSignature, keyEncipherment
+      subjectAltName = ${ENV::SAN}
+  run_once: true
+  vars:
+    - ansible_user: "{{ kafka_localhost_user }}"
+    - ansible_become_password: "{{ kafka_localhost_user_pass }}"
+  delegate_to: localhost
+  tags: ssl_sasl_kafka
+
+- name: Sign the CSR using CA and private key
+  ansible.builtin.command:
+    cmd: >
+      openssl x509 -req -CA {{ role_path }}/files/kafka.crt
+      -CAkey {{ role_path }}/files/kafka.key -in {{ role_path }}/files/{{ inventory_hostname }}-keystore-cert
+      -out {{ role_path }}/files/{{ inventory_hostname }}-keystore-cert-signed -days 3650 -CAcreateserial -passin pass:{{ kafka_privkey_pass }}
+      -extensions v3_req_custom -extfile {{ role_path }}/files/openssl_san.cnf
+    creates:
+      - "{{ kafka_exported_keystore_cert_file }}"
+  delegate_to: localhost
+  vars:
+    - ansible_user: "{{ kafka_localhost_user }}"
+    - ansible_become_password: "{{ kafka_localhost_user_pass }}"
+  environment:
+    - SAN: "IP:{{ ansible_host }},IP:{{ haproxy_keepalived_cluster_vip }},IP:{{ hostvars['unit_19_g10_haproxy_node_0'].ansible_host }},IP:{{ hostvars['unit_19_g10_haproxy_node_1'].ansible_host }}"
+  tags: ssl_sasl_kafka
+
+- name: Push signed cert to the hosts
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/{{ inventory_hostname }}-keystore-cert-signed"
+    dest: "{{ kafka_signed_keystore_cert_file }}"
+    owner: "{{ kafka_install.user }}"
+    group: "{{ kafka_install.group }}"
+    mode: "0600"
+  tags: ssl_sasl_kafka
+
+- name: Push cert to the hosts
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/kafka.crt"
+    dest: "{{ kafka_certs_crt }}"
+    owner: "{{ kafka_install.user }}"
+    group: "{{ kafka_install.group }}"
+    mode: "0600"
+  tags: ssl_sasl_kafka
+
+- name: Generate server truststore using CA
+  ansible.builtin.command:
+    cmd: >
+      keytool -keystore {{ kafka_certs_server_truststore }}
+      -alias CARoot -import -file {{ kafka_certs_crt }} -storepass {{ kafka_server_truststore_pass }} -noprompt
+    creates:
+      - "{{ kafka_certs_server_truststore }}"
+  tags: ssl_sasl_kafka
+
+- name: Generate client truststore using CA
+  ansible.builtin.command:
+    cmd: >
+      keytool -keystore {{ kafka_certs_client_truststore }}
+      -alias CARoot -import -file {{ kafka_certs_crt }} -storepass {{ kafka_client_truststore_pass }} -noprompt
+    creates:
+      - "{{ kafka_certs_client_truststore }}"
+  tags: ssl_sasl_kafka
+
+- name: Import CA to keystore
+  ansible.builtin.command:
+    cmd: >
+      keytool -keystore {{ kafka_certs_server_keystore }} -alias CARoot
+      -import -file {{ kafka_certs_crt }} -storepass {{ kafka_server_keystore_pass }} -noprompt
+  tags: ssl_sasl_kafka
+
+- name: Import signed CA to keystore
+  ansible.builtin.command:
+    cmd: >
+      keytool -keystore {{ kafka_certs_server_keystore }} -alias localhost
+      -import -file {{ kafka_signed_keystore_cert_file }} -storepass {{ kafka_server_keystore_pass }}
+  tags: ssl_sasl_kafka
+
+- name: Delete unusage certs
+  ansible.builtin.file:
+    state: absent
+    path: "{{ item }}"
+  loop:
+    - "{{ kafka_signed_keystore_cert_file }}"
+    - "{{ kafka_exported_keystore_cert_file }}"
+    - "{{ kafka_certs_dir }}/kafka.srl"
+    - "{{ kafka_certs_privkey }}"
+    - "{{ kafka_certs_crt }}"
+  tags: ssl_sasl_kafka
